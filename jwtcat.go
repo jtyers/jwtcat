@@ -2,18 +2,16 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		fmt.Print(processJwt(scanner.Text()))
+		processJwt(scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
@@ -24,35 +22,30 @@ func main() {
 // JWT is a triplet of Base64-encoded strings separated by dots.
 // We simply decode each in turn.
 func processJwt(jwtStr string) string {
-	parts := strings.Split(jwtStr, ".")
-
-	result := ""
-
-	for i, part := range parts {
-		if i == 2 {
-			parts[i] = "[skipped decoding signature]"
-
-		} else {
-			decoded, err := base64.StdEncoding.DecodeString(part)
-			if err != nil {
-				parts[i] = fmt.Sprintf("[Base64 decode failed: %v]", err)
-
-			} else {
-				// https://stackoverflow.com/a/29046984/1432488
-				var prettyJSON bytes.Buffer
-				err = json.Indent(&prettyJSON, decoded, "", "\t")
-
-				if err != nil {
-					parts[i] = fmt.Sprintf("[JSON decode failed: %v]", err)
-
-				} else {
-					parts[i] = prettyJSON.String()
-				}
-			}
-		}
-
-		result += parts[i] + "\n"
+	parser := jwt.Parser{}
+	token, _, err := parser.ParseUnverified(jwtStr, &jwt.MapClaims{})
+	if err != nil {
+		panic(fmt.Sprintf("error parsing token: %v", err))
 	}
 
-	return result
+	claims, ok := token.Claims.(*jwt.MapClaims)
+	if !ok {
+		panic(fmt.Sprintf("claims was %T, wanted *MapClaims: %v", token.Claims))
+	}
+
+	fmt.Printf("Signed using %q\n", token.Method.Alg())
+
+	fmt.Printf("\n")
+	fmt.Printf("Header\n")
+	for k, v := range token.Header {
+		fmt.Printf("HH  [%s] %v\n", k, v)
+	}
+
+	fmt.Printf("\n")
+	fmt.Printf("Claims\n")
+	for k, v := range *claims {
+		fmt.Printf("CC  [%s] %v\n", k, v)
+	}
+
+	return ""
 }
